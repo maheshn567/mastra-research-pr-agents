@@ -1,7 +1,7 @@
 {
-  "name": "deep-research-agent",
+  "name": "mastra-research-pr-agents",
   "version": "1.0.0",
-  "description": "Deep Research Agent & GitHub PR Reviewer built with Mastra",
+  "description": "Mastra-based AI agents: multi-agent deep research pipeline and automated GitHub PR reviewer with human-approval loop",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
