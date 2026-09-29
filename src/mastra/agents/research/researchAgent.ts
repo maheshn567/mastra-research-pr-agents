@@ -11,7 +11,7 @@ const llmProvider = createOpenAI({
   apiKey: process.env.GROQ_API_KEY || process.env.NVIDIA_API_KEY1 || process.env.NVIDIA_API_KEY || '',
 });
 
-const modelName = isGroq ? 'llama-3.3-70b-versatile' : (process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct');
+const modelName = isGroq ? 'openai/gpt-oss-120b' : (process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct');
 
 export const researchAgent = new Agent({
   name: 'Research Collector Agent',
