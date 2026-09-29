@@ -44,11 +44,17 @@ async function main() {
 
   const workflow = mastra.getWorkflow('prReviewWorkflow');
 
-  // Target GitHub PR
+  // Target GitHub PR: CLI arg or PR_URL env, e.g. https://github.com/owner/repo/pull/1
+  const prUrl = process.argv[2] || process.env.PR_URL;
+  const match = prUrl?.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!match) {
+    console.error('❌ Provide a PR URL: npx tsx src/prIndex.ts https://github.com/<owner>/<repo>/pull/<n> (or set PR_URL)');
+    process.exit(1);
+  }
   const prTarget = {
-    owner: 'maheshn567',
-    repo: 'vector_valut-RAG-',
-    pullNumber: 1,
+    owner: match[1],
+    repo: match[2],
+    pullNumber: Number(match[3]),
   };
 
   console.log(`📌 Target PR: https://github.com/${prTarget.owner}/${prTarget.repo}/pull/${prTarget.pullNumber}`);
