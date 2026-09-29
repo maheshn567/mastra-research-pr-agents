@@ -1,6 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { githubPRTool } from '../../tools/githubPRTool.ts';
+import { deepseekHarnessTool } from '../../tools/deepseekHarnessTool.ts';
 import { qualityAgent } from '../../agents/pr/qualityAgent.ts';
 import { performanceAgent } from '../../agents/pr/performanceAgent.ts';
 import { prReviewerAgent } from '../../agents/pr/prReviewerAgent.ts';
@@ -49,7 +50,7 @@ const fetchPRStep = createStep({
   },
 });
 
-// 2. Step 2: Audit Quality & Performance
+// 2. Step 2: Audit Security, AST Quality, & Performance via DeepSeek Harness (DSH)
 const auditPRStep = createStep({
   id: 'audit-pr-step',
   inputSchema: z.object({
@@ -68,11 +69,26 @@ const auditPRStep = createStep({
     diffSummary: z.string(),
     qualityAudit: z.string(),
     performanceAudit: z.string(),
+    securityScanSummary: z.string(),
+    astAnalysisSummary: z.string(),
   }),
   execute: async ({ inputData }) => {
     const { prTitle, prDescription, author, diffSummary } = inputData;
-    console.log(`\n🔍 [Audit Step] Running Code Quality evaluation...`);
 
+    // A. Execute DeepSeek Harness (DSH) Cordis plugins for Security & AST analysis
+    console.log(`\n🤖 [Audit Step] Executing DeepSeek Harness (DSH) Cordis plugins...`);
+    const securityRes = await deepseekHarnessTool.execute({
+      pluginName: 'dsh-security-scanner',
+      inputData: diffSummary,
+    });
+
+    const astRes = await deepseekHarnessTool.execute({
+      pluginName: 'dsh-ast-analyzer',
+      inputData: diffSummary,
+    });
+
+    // B. Run LLM Quality & Performance evaluations
+    console.log(`🔍 [Audit Step] Running Code Quality evaluation...`);
     const qualityPrompt = `Audit the following PR diff for code quality, type safety, and clean code principles:\n\n${diffSummary}`;
     const qualityRes = await qualityAgent.generateLegacy(qualityPrompt, { maxSteps: 2 });
 
@@ -90,6 +106,8 @@ const auditPRStep = createStep({
       diffSummary,
       qualityAudit: qualityRes.text,
       performanceAudit: perfRes.text,
+      securityScanSummary: securityRes.summary,
+      astAnalysisSummary: astRes.summary,
     };
   },
 });
@@ -104,12 +122,14 @@ const reviewSynthesisStep = createStep({
     diffSummary: z.string(),
     qualityAudit: z.string(),
     performanceAudit: z.string(),
+    securityScanSummary: z.string(),
+    astAnalysisSummary: z.string(),
   }),
   outputSchema: z.object({
     prReviewReport: z.string(),
   }),
   execute: async ({ inputData }) => {
-    const { prTitle, prDescription, author, diffSummary, qualityAudit, performanceAudit } = inputData;
+    const { prTitle, prDescription, author, diffSummary, qualityAudit, performanceAudit, securityScanSummary, astAnalysisSummary } = inputData;
     console.log(`\n📝 [PR Synthesis Step] Generating executive PR Review & Preview Report...`);
 
     // Short 2s pause to refresh Groq TPM sliding window
@@ -119,6 +139,8 @@ const reviewSynthesisStep = createStep({
     - **Title**: ${prTitle}
     - **Author**: @${author}
     - **Description**: ${prDescription}
+    - **DeepSeek Harness Security Scan**: ${securityScanSummary}
+    - **DeepSeek Harness AST Analysis**: ${astAnalysisSummary}
 
     ### Git Diff Summary:
     ${diffSummary}
