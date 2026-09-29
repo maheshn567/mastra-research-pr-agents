@@ -1,8 +1,7 @@
 import * as http from 'http';
 import * as crypto from 'crypto';
 import 'dotenv/config';
-import { mastra } from './mastra/index.ts';
-import { postPRReviewTool } from './mastra/tools/postPRReviewTool.ts';
+import { reviewWithApproval } from './prReviewFlow.ts';
 
 const PORT = process.env.PORT || 8080;
 const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || '';
@@ -25,43 +24,29 @@ function verifySignature(payload: string, signature: string | undefined): boolea
 }
 
 const REVIEW_ACTIONS = new Set(['opened', 'synchronize', 'reopened']);
-const inFlight = new Set<string>();
+const queued = new Set<string>();
+let queue: Promise<void> = Promise.resolve();
 
 /**
- * Runs the PR review workflow and posts the result to GitHub as a COMMENT review.
- * Runs in the background so the webhook can answer GitHub within its 10s timeout.
+ * Queues a PR review. The review report is shown in this terminal and only posted to GitHub after
+ * human approval. Reviews run one at a time because they share the terminal for approval prompts.
  */
-async function reviewAndPost(owner: string, repo: string, pullNumber: number) {
+function enqueueReview(owner: string, repo: string, pullNumber: number) {
   const key = `${owner}/${repo}#${pullNumber}`;
-  if (inFlight.has(key)) {
-    console.log(`⏭️  [Auto Review] ${key} already being reviewed, skipping.`);
+  if (queued.has(key)) {
+    console.log(`⏭️  [Webhook Review] ${key} already queued, skipping.`);
     return;
   }
-  inFlight.add(key);
+  queued.add(key);
 
-  try {
-    console.log(`🤖 [Auto Review] Starting review for ${key}...`);
-    const run = await mastra.getWorkflow('prReviewWorkflow').createRun();
-    const result = await run.start({ inputData: { owner, repo, pullNumber } });
-
-    if (result.status !== 'success' || !result.result) {
-      console.error(`❌ [Auto Review] Workflow failed for ${key}:`, result.status);
-      return;
+  queue = queue.then(async () => {
+    console.log(`\n🤖 [Webhook Review] Starting review for ${key}...`);
+    try {
+      await reviewWithApproval({ owner, repo, pullNumber });
+    } finally {
+      queued.delete(key);
     }
-
-    const postResult = await postPRReviewTool.execute({
-      owner,
-      repo,
-      pullNumber,
-      reviewReport: result.result.prReviewReport,
-      event: 'COMMENT',
-    });
-    console.log(`🎉 [Auto Review] ${postResult.message}${postResult.htmlUrl ? ` → ${postResult.htmlUrl}` : ''}`);
-  } catch (err: any) {
-    console.error(`❌ [Auto Review] Error reviewing ${key}:`, err.message);
-  } finally {
-    inFlight.delete(key);
-  }
+  });
 }
 
 const server = http.createServer((req, res) => {
@@ -106,7 +91,7 @@ const server = http.createServer((req, res) => {
           console.log('====================================================\n');
 
           if (REVIEW_ACTIONS.has(action) && !payload.pull_request?.draft && owner && repo) {
-            void reviewAndPost(owner, repo, pullNumber);
+            enqueueReview(owner, repo, pullNumber);
           }
         }
 
