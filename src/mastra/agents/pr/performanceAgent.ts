@@ -1,15 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import { createOpenAI } from '@ai-sdk/openai';
+import { llmProvider, modelName } from '../../llm.ts';
 import 'dotenv/config';
-
-const isGroq = !!process.env.GROQ_API_KEY;
-
-const llmProvider = createOpenAI({
-  baseURL: isGroq ? 'https://api.groq.com/openai/v1' : (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1'),
-  apiKey: process.env.GROQ_API_KEY || process.env.NVIDIA_API_KEY1 || process.env.NVIDIA_API_KEY || '',
-});
-
-const modelName = isGroq ? 'openai/gpt-oss-120b' : (process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct');
 
 export const performanceAgent = new Agent({
   name: 'PR Performance Evaluator Agent',
